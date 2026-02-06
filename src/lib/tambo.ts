@@ -9,108 +9,20 @@
  */
 
 import { Graph, graphSchema } from "@/components/tambo/graph";
+import { CommitTimeline, commitTimelineSchema } from "@/components/tambo/commit-timeline";
 import { DataCard, dataCardSchema } from "@/components/ui/card-data";
 import {
   getCountryPopulations,
   getGlobalPopulationTrend,
 } from "@/services/population-stats";
-import {
-  getRepoInfo,
-  getRecentCommits,
-  getFileContent,
-  listRepoContents,
-} from "@/services/github-api";
 import type { TamboComponent } from "@tambo-ai/react";
 import { TamboTool } from "@tambo-ai/react";
 import { z } from "zod";
 
+// Note: GitHub tools are now provided via the GitHub MCP Server
+// See src/services/github-mcp.ts for the MCP configuration
+
 export const tools: TamboTool[] = [
-  // GitHub tools
-  {
-    name: "getRepoInfo",
-    description:
-      "Get information about the currently imported GitHub repository. Returns repo name, description, default branch, stars, forks, language, and last updated date. Use this to understand what repository the user is working with.",
-    tool: getRepoInfo,
-    inputSchema: z.object({}),
-    outputSchema: z.object({
-      success: z.boolean(),
-      data: z.object({
-        fullName: z.string(),
-        description: z.string().nullable(),
-        defaultBranch: z.string(),
-        stars: z.number(),
-        forks: z.number(),
-        language: z.string().nullable(),
-        lastUpdated: z.string(),
-        url: z.string(),
-      }).optional(),
-      error: z.string().optional(),
-    }),
-  },
-  {
-    name: "getRecentCommits",
-    description:
-      "Get recent commits from the currently imported GitHub repository. Returns commit SHA, message, author, date, and URL. Use this to see the latest changes and commit history.",
-    tool: getRecentCommits,
-    inputSchema: z.object({
-      count: z.number().optional().describe("Number of commits to fetch (default: 10, max: 100)"),
-    }),
-    outputSchema: z.object({
-      success: z.boolean(),
-      data: z.object({
-        repo: z.string(),
-        branch: z.string(),
-        commits: z.array(z.object({
-          sha: z.string(),
-          message: z.string(),
-          author: z.string(),
-          date: z.string(),
-          url: z.string(),
-        })),
-      }).optional(),
-      error: z.string().optional(),
-    }),
-  },
-  {
-    name: "getFileContent",
-    description:
-      "Get the contents of a specific file from the currently imported GitHub repository. Provide the file path relative to the repository root.",
-    tool: getFileContent,
-    inputSchema: z.object({
-      path: z.string().describe("File path relative to repository root (e.g., 'README.md', 'src/index.ts')"),
-    }),
-    outputSchema: z.object({
-      success: z.boolean(),
-      data: z.object({
-        path: z.string(),
-        content: z.string(),
-        size: z.number(),
-      }).optional(),
-      error: z.string().optional(),
-    }),
-  },
-  {
-    name: "listRepoContents",
-    description:
-      "List files and directories in a path of the currently imported GitHub repository. Use this to explore the repository structure.",
-    tool: listRepoContents,
-    inputSchema: z.object({
-      path: z.string().optional().describe("Directory path to list (default: repository root)"),
-    }),
-    outputSchema: z.object({
-      success: z.boolean(),
-      data: z.object({
-        path: z.string(),
-        items: z.array(z.object({
-          name: z.string(),
-          type: z.enum(["file", "dir"]),
-          path: z.string(),
-          size: z.number().optional(),
-        })),
-      }).optional(),
-      error: z.string().optional(),
-    }),
-  },
   // Population Statistics Tools (demo)
   {
     name: "countryPopulation",
@@ -183,5 +95,13 @@ export const components: TamboComponent[] = [
     component: DataCard,
     propsSchema: dataCardSchema,
   },
+  {
+    name: "CommitTimeline",
+    description:
+      "A component that displays a timeline of git commits grouped by month. Use when the user asks to see commit history, git log, repository activity, or wants to visualize changes over time. IMPORTANT: You MUST call get_commit for EACH commit to get the stats (additions/deletions) and files array - the list_commits endpoint does NOT include this data. Shows commit messages, authors, dates, line changes (+added/-removed), and expandable file change details.",
+    component: CommitTimeline,
+    propsSchema: commitTimelineSchema,
+  },
   // Add more components here
 ];
+

@@ -506,6 +506,22 @@ const MessageInputInternal = React.forwardRef<
         latestResourceNames = extracted.resourceNames;
       }
 
+      // Inject repo context from localStorage (hidden from UI)
+      let messageToSend = value;
+      try {
+        const savedRepo = localStorage.getItem("gitstory-repo");
+        if (savedRepo) {
+          const { owner, repo, branch } = JSON.parse(savedRepo);
+          const repoUrl = `https://github.com/${owner}/${repo}${branch ? `/tree/${branch}` : ''}`;
+          messageToSend = `${value}\n\n[Repository Context: ${repoUrl}]`;
+          setValue(messageToSend);
+          // Wait a tick for value to propagate
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+      } catch {
+        // Ignore localStorage errors
+      }
+
       const imageIdsAtSubmitTime = images.map((image) => image.id);
 
       try {

@@ -34,7 +34,7 @@ import {
 } from "@/components/tambo/thread-history";
 import { useMergeRefs } from "@/lib/thread-hooks";
 import type { Suggestion } from "@tambo-ai/react";
-import { useTamboThread } from "@tambo-ai/react";
+import { useTamboThread, useTamboThreadInput } from "@tambo-ai/react";
 import type { VariantProps } from "class-variance-authority";
 import * as React from "react";
 
@@ -62,6 +62,23 @@ export const MessageThreadFull = React.forwardRef<
   const { containerRef, historyPosition } = useThreadContainerContext();
   const mergedRef = useMergeRefs<HTMLDivElement | null>(ref, containerRef);
   const { startNewThread } = useTamboThread();
+  const { setValue, submit, value } = useTamboThreadInput();
+
+  // Get repo context from localStorage
+  const getRepoContext = React.useCallback((): string | null => {
+    if (typeof window === "undefined") return null;
+    try {
+      const saved = localStorage.getItem("gitstory-repo");
+      if (saved) {
+        const { owner, repo, branch } = JSON.parse(saved);
+        const url = `https://github.com/${owner}/${repo}${branch ? `/tree/${branch}` : ''}`;
+        return `\n\n[Repository Context: ${url}]`;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  }, []);
 
   // Listen for repo change events to start a new thread (clears old context)
   React.useEffect(() => {
@@ -74,6 +91,51 @@ export const MessageThreadFull = React.forwardRef<
       window.removeEventListener("gitstory-start-new-thread", handleStartNewThread);
     };
   }, [startNewThread]);
+
+  // Listen for import code message events to send a hidden exploration message
+  React.useEffect(() => {
+    const handleImportCodeMessage = async (event: CustomEvent<{ repoUrl: string }>) => {
+      const { repoUrl } = event.detail;
+      // Add hidden tag to the message so it can be filtered from UI
+      const hiddenMessage = `<!-- HIDDEN:import-code-initialization -->I want to explore this GitHub repository: ${repoUrl}`;
+
+      // Wait a bit for the new thread to be ready
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Set the value and submit
+      setValue(hiddenMessage);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      await submit({ streamResponse: true, resourceNames: {} });
+    };
+
+    window.addEventListener("gitstory-import-code-message", handleImportCodeMessage as unknown as EventListener);
+    return () => {
+      window.removeEventListener("gitstory-import-code-message", handleImportCodeMessage as unknown as EventListener);
+    };
+  }, [setValue, submit]);
+
+  // Custom submit wrapper that appends repo context invisibly
+  const submitWithRepoContext = React.useCallback(async (
+    options: { streamResponse?: boolean; resourceNames: Record<string, string> }
+  ) => {
+    const repoContext = getRepoContext();
+    if (repoContext && value) {
+      // Temporarily add repo context to the message
+      const originalValue = value;
+      setValue(originalValue + repoContext);
+
+      // Wait a tick for the value to be set
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      try {
+        await submit(options);
+      } finally {
+        // The value is cleared after submit anyway
+      }
+    } else {
+      await submit(options);
+    }
+  }, [getRepoContext, value, setValue, submit]);
 
   const threadHistorySidebar = (
     <ThreadHistory position={historyPosition}>

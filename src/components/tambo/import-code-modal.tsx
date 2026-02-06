@@ -111,6 +111,14 @@ export const ImportCodeModal: React.FC<ImportCodeModalProps> = ({
                 new CustomEvent("gitstory-start-new-thread")
             );
 
+            // Dispatch event to send a hidden message to explore the repository
+            const repoUrl = `https://github.com/${parsed.owner}/${parsed.repo}${parsed.branch ? `/tree/${parsed.branch}` : ''}`;
+            window.dispatchEvent(
+                new CustomEvent("gitstory-import-code-message", {
+                    detail: { repoUrl },
+                })
+            );
+
             onClose();
         } catch (err) {
             console.error("Failed to import repository:", err);

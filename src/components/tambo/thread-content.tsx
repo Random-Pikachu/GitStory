@@ -127,9 +127,52 @@ const ThreadContentMessages = React.forwardRef<
 >(({ className, ...props }, ref) => {
   const { messages, isGenerating, variant } = useThreadContentContext();
 
-  const filteredMessages = messages.filter(
-    (message) => message.role !== "system" && !message.parentMessageId,
-  );
+  // Helper to check if a message contains the hidden import code tag
+  const isHiddenImportCodeMessage = (message: TamboThreadMessage): boolean => {
+    if (!message.content) return false;
+    // Check if content is an array of content blocks
+    if (Array.isArray(message.content)) {
+      return message.content.some((block) => {
+        if (typeof block === 'object' && 'text' in block && typeof block.text === 'string') {
+          return block.text.includes('<!-- HIDDEN:import-code-initialization -->');
+        }
+        return false;
+      });
+    }
+    // Check if content is a string (cast to handle type narrowing)
+    const contentStr = message.content as unknown;
+    if (typeof contentStr === 'string') {
+      return contentStr.includes('<!-- HIDDEN:import-code-initialization -->');
+    }
+    return false;
+  };
+
+  // Build a set of hidden message IDs
+  const hiddenMessageIds = new Set<string>();
+  messages.forEach((message) => {
+    if (isHiddenImportCodeMessage(message) && message.id) {
+      hiddenMessageIds.add(message.id);
+    }
+  });
+
+  const filteredMessages = messages.filter((message, index) => {
+    // Filter out system messages and child messages
+    if (message.role === "system" || message.parentMessageId) return false;
+
+    // Filter out hidden import code messages
+    if (isHiddenImportCodeMessage(message)) return false;
+
+    // Filter out assistant responses to hidden messages
+    // Check if the previous message was hidden (assistant responses follow user messages)
+    if (message.role === "assistant" && index > 0) {
+      const prevMessage = messages[index - 1];
+      if (prevMessage && isHiddenImportCodeMessage(prevMessage)) {
+        return false;
+      }
+    }
+
+    return true;
+  });
 
   return (
     <div
