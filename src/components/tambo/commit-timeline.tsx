@@ -5,13 +5,10 @@ import { ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { z } from "zod";
 
-// Schema for Tambo registration
-// IMPORTANT: For lines added/removed and file changes, you MUST fetch detailed commit info
-// using get_commit or similar endpoint for EACH commit - the list commits endpoint doesn't include stats
 const FileChangeSchema = z.object({
     path: z.string().describe("The file path that was changed, e.g., 'src/auth/index.ts'"),
-    added: z.number().describe("Number of lines added to this file - get from commit details API"),
-    removed: z.number().describe("Number of lines removed from this file - get from commit details API"),
+    added: z.number().optional().default(0).describe("Number of lines added"),
+    removed: z.number().optional().default(0).describe("Number of lines removed"),
 });
 
 const CommitSchema = z.object({
@@ -20,20 +17,20 @@ const CommitSchema = z.object({
     hash: z.string().describe("Short git commit hash (first 7 chars), e.g., 'abc123d'"),
     author: z.string().describe("Name of the commit author"),
     date: z.string().describe("Human-readable date, e.g., 'Jan 15' or 'Dec 28'"),
-    added: z.number().describe("REQUIRED: Total lines added - fetch from get_commit API stats.additions"),
-    removed: z.number().describe("REQUIRED: Total lines removed - fetch from get_commit API stats.deletions"),
-    tag: z.string().optional().describe("Optional tag like 'v1.0.0' or 'breaking-change'"),
-    files: z.array(FileChangeSchema).describe("REQUIRED: List of files changed - fetch from get_commit API files array with additions/deletions per file"),
+    added: z.number().optional().default(0).describe("Total lines added"),
+    removed: z.number().optional().default(0).describe("Total lines removed"),
+    tag: z.string().optional().describe("Optional tag"),
+    files: z.array(FileChangeSchema).optional().default([]).describe("List of files changed"),
 });
 
 const MonthGroupSchema = z.object({
     month: z.string().describe("Month and year label, e.g., 'January 2024'"),
-    commits: z.array(CommitSchema).describe("Commits in this month with full stats fetched via get_commit"),
+    commits: z.array(CommitSchema).describe("Commits in this month"),
 });
 
 export const commitTimelineSchema = z.object({
-    data: z.array(MonthGroupSchema).describe("Array of month groups containing commits. For each commit, you MUST call get_commit to get stats (additions/deletions) and files array."),
-}).describe("Displays a timeline of git commits with lines changed and file details. You MUST fetch detailed stats for each commit using get_commit API.");
+    data: z.array(MonthGroupSchema).describe("Array of month groups containing commits"),
+}).describe("Displays a timeline of git commits grouped by month");
 
 interface FileChange {
     path: string;
@@ -164,8 +161,8 @@ export function CommitTimeline({ data }: CommitTimelineProps) {
 
             {/* Timeline */}
             <div className="space-y-8">
-                {filteredData.map((monthGroup) => (
-                    <div key={monthGroup.month}>
+                {filteredData.map((monthGroup, monthIndex) => (
+                    <div key={`${monthGroup.month}-${monthIndex}`}>
                         {/* Month Badge */}
                         <div className="inline-block px-4 py-2 rounded-md mb-4" style={{ backgroundColor: "#21262d", border: "1px solid #30363d" }}>
                             <span style={{ color: "#7d8590" }}>{monthGroup.month}</span>
@@ -184,171 +181,179 @@ export function CommitTimeline({ data }: CommitTimelineProps) {
 
                             {/* Commit Cards */}
                             <div className="space-y-4">
-                                {monthGroup.commits.map((commit) => (
-                                    <div key={commit.id} className="relative pl-10">
-                                        {/* Timeline Dot */}
-                                        <div
-                                            className="absolute left-0 top-6 w-4 h-4 rounded-full border-2"
-                                            style={{
-                                                backgroundColor: "#0d1117",
-                                                borderColor: "#238636",
-                                                boxShadow: "0 0 6px rgba(35, 134, 54, 0.3)",
-                                            }}
-                                        />
+                                {monthGroup.commits.map((commit, commitIndex) => {
+                                    // Skip incomplete commits during streaming
+                                    if (!commit || !commit.id) return null;
 
-                                        {/* Commit Card */}
-                                        <div
-                                            className="rounded-lg p-4 transition-colors hover:bg-opacity-80 cursor-pointer"
-                                            style={{
-                                                backgroundColor: "#0d1117",
-                                                border: "1px solid #30363d",
-                                            }}
-                                            onClick={() => setExpandedCommit(expandedCommit === commit.id ? null : commit.id)}
-                                        >
-                                            {/* Tag */}
-                                            {commit.tag && (
-                                                <div className="mb-2">
-                                                    <span
-                                                        className="inline-block px-2 py-1 rounded text-xs"
-                                                        style={{
-                                                            backgroundColor: commit.tag === "breaking-change" ? "#6e3708" : "#3d1f00",
-                                                            color: "#f2cc60",
-                                                            border: "1px solid #9e6a03",
-                                                        }}
-                                                    >
-                                                        {commit.tag}
-                                                    </span>
-                                                </div>
-                                            )}
+                                    return (
+                                        <div key={`${commit.id}-${commitIndex}`} className="relative pl-10">
+                                            {/* Timeline Dot */}
+                                            <div
+                                                className="absolute left-0 top-6 w-4 h-4 rounded-full border-2"
+                                                style={{
+                                                    backgroundColor: "#0d1117",
+                                                    borderColor: "#238636",
+                                                    boxShadow: "0 0 6px rgba(35, 134, 54, 0.3)",
+                                                }}
+                                            />
 
-                                            <div className="flex items-start justify-between gap-4">
-                                                <div className="flex-1">
-                                                    {/* Commit Message */}
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <motion.div
-                                                            animate={{ rotate: expandedCommit === commit.id ? 90 : 0 }}
-                                                            transition={{ duration: 0.2 }}
+                                            {/* Commit Card */}
+                                            <div
+                                                className="rounded-lg p-4 transition-colors hover:bg-opacity-80 cursor-pointer"
+                                                style={{
+                                                    backgroundColor: "#0d1117",
+                                                    border: "1px solid #30363d",
+                                                }}
+                                                onClick={() => setExpandedCommit(expandedCommit === commit.id ? null : commit.id)}
+                                            >
+                                                {/* Tag */}
+                                                {commit.tag && (
+                                                    <div className="mb-2">
+                                                        <span
+                                                            className="inline-block px-2 py-1 rounded text-xs"
+                                                            style={{
+                                                                backgroundColor: commit.tag === "breaking-change" ? "#6e3708" : "#3d1f00",
+                                                                color: "#f2cc60",
+                                                                border: "1px solid #9e6a03",
+                                                            }}
                                                         >
-                                                            <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: "#7d8590" }} />
-                                                        </motion.div>
-                                                        <h3 style={{ color: "#e6edf3" }}>
-                                                            {commit.message}
-                                                        </h3>
+                                                            {commit.tag}
+                                                        </span>
                                                     </div>
-
-                                                    {/* Meta Info */}
-                                                    <div className="flex items-center gap-3 text-sm ml-6" style={{ color: "#7d8590" }}>
-                                                        <span style={{ fontFamily: "var(--font-family-mono)" }}>{commit.hash}</span>
-                                                        <span>•</span>
-                                                        <span>{commit.author}</span>
-                                                        <span>•</span>
-                                                        <span>{commit.date}</span>
-                                                    </div>
-                                                </div>
-
-                                                {/* Stats */}
-                                                <div className="flex items-center gap-4 flex-shrink-0">
-                                                    <div className="text-right">
-                                                        <div style={{ color: "#3fb950" }}>
-                                                            +{commit.added}
-                                                        </div>
-                                                        <div className="text-xs" style={{ color: "#7d8590" }}>
-                                                            added
-                                                        </div>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <div style={{ color: "#f85149" }}>
-                                                            -{commit.removed}
-                                                        </div>
-                                                        <div className="text-xs" style={{ color: "#7d8590" }}>
-                                                            removed
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Accordion - File Changes */}
-                                            <AnimatePresence>
-                                                {expandedCommit === commit.id && (
-                                                    <motion.div
-                                                        initial={{ height: 0, opacity: 0 }}
-                                                        animate={{ height: "auto", opacity: 1 }}
-                                                        exit={{ height: 0, opacity: 0 }}
-                                                        transition={{ duration: 0.3, ease: "easeInOut" }}
-                                                        style={{ overflow: "hidden" }}
-                                                    >
-                                                        <div className="mt-4 pt-4" style={{ borderTop: "1px solid #30363d" }}>
-                                                            <div className="text-sm mb-3" style={{ color: "#7d8590" }}>
-                                                                {commit.files?.length ?? 0} {(commit.files?.length ?? 0) === 1 ? 'file' : 'files'} changed
-                                                            </div>
-                                                            <div className="space-y-2">
-                                                                {(commit.files ?? []).map((file, idx) => (
-                                                                    <motion.div
-                                                                        key={idx}
-                                                                        initial={{ x: -10, opacity: 0 }}
-                                                                        animate={{ x: 0, opacity: 1 }}
-                                                                        transition={{ duration: 0.2, delay: idx * 0.05 }}
-                                                                        className="flex items-center justify-between p-3 rounded-md"
-                                                                        style={{
-                                                                            backgroundColor: "#161b22",
-                                                                            border: "1px solid #30363d",
-                                                                        }}
-                                                                    >
-                                                                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                                            <svg
-                                                                                className="w-4 h-4 flex-shrink-0"
-                                                                                fill="none"
-                                                                                stroke="#7d8590"
-                                                                                viewBox="0 0 24 24"
-                                                                            >
-                                                                                <path
-                                                                                    strokeLinecap="round"
-                                                                                    strokeLinejoin="round"
-                                                                                    strokeWidth={2}
-                                                                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                                                                                />
-                                                                            </svg>
-                                                                            <span
-                                                                                className="truncate"
-                                                                                style={{
-                                                                                    color: "#58a6ff",
-                                                                                    fontFamily: "var(--font-family-mono)",
-                                                                                    fontSize: "0.875rem",
-                                                                                }}
-                                                                            >
-                                                                                {file.path}
-                                                                            </span>
-                                                                        </div>
-                                                                        <div className="flex items-center gap-3 ml-4 flex-shrink-0">
-                                                                            <span
-                                                                                style={{
-                                                                                    color: "#3fb950",
-                                                                                    fontSize: "0.875rem",
-                                                                                    fontFamily: "var(--font-family-mono)",
-                                                                                }}
-                                                                            >
-                                                                                +{file.added}
-                                                                            </span>
-                                                                            <span
-                                                                                style={{
-                                                                                    color: "#f85149",
-                                                                                    fontSize: "0.875rem",
-                                                                                    fontFamily: "var(--font-family-mono)",
-                                                                                }}
-                                                                            >
-                                                                                -{file.removed}
-                                                                            </span>
-                                                                        </div>
-                                                                    </motion.div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    </motion.div>
                                                 )}
-                                            </AnimatePresence>
+
+                                                <div className="flex items-start justify-between gap-4">
+                                                    <div className="flex-1">
+                                                        {/* Commit Message */}
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <motion.div
+                                                                animate={{ rotate: expandedCommit === commit.id ? 90 : 0 }}
+                                                                transition={{ duration: 0.2 }}
+                                                            >
+                                                                <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: "#7d8590" }} />
+                                                            </motion.div>
+                                                            <h3 style={{ color: "#e6edf3" }}>
+                                                                {commit.message}
+                                                            </h3>
+                                                        </div>
+
+                                                        {/* Meta Info */}
+                                                        <div className="flex items-center gap-3 text-sm ml-6" style={{ color: "#7d8590" }}>
+                                                            <span style={{ fontFamily: "var(--font-family-mono)" }}>{commit.hash}</span>
+                                                            <span>•</span>
+                                                            <span>{commit.author}</span>
+                                                            <span>•</span>
+                                                            <span>{commit.date}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Stats */}
+                                                    <div className="flex items-center gap-4 flex-shrink-0">
+                                                        <div className="text-right">
+                                                            <div style={{ color: "#3fb950" }}>
+                                                                +{commit.added}
+                                                            </div>
+                                                            <div className="text-xs" style={{ color: "#7d8590" }}>
+                                                                added
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <div style={{ color: "#f85149" }}>
+                                                                -{commit.removed}
+                                                            </div>
+                                                            <div className="text-xs" style={{ color: "#7d8590" }}>
+                                                                removed
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Accordion - File Changes */}
+                                                <AnimatePresence>
+                                                    {expandedCommit === commit.id && (
+                                                        <motion.div
+                                                            initial={{ height: 0, opacity: 0 }}
+                                                            animate={{ height: "auto", opacity: 1 }}
+                                                            exit={{ height: 0, opacity: 0 }}
+                                                            transition={{ duration: 0.3, ease: "easeInOut" }}
+                                                            style={{ overflow: "hidden" }}
+                                                        >
+                                                            <div className="mt-4 pt-4" style={{ borderTop: "1px solid #30363d" }}>
+                                                                <div className="text-sm mb-3" style={{ color: "#7d8590" }}>
+                                                                    {commit.files?.length ?? 0} {(commit.files?.length ?? 0) === 1 ? 'file' : 'files'} changed
+                                                                </div>
+                                                                <div className="space-y-2">
+                                                                    {(commit.files ?? []).map((file, idx) => {
+                                                                        if (!file) return null;
+                                                                        return (
+                                                                            <motion.div
+                                                                                key={idx}
+                                                                                initial={{ x: -10, opacity: 0 }}
+                                                                                animate={{ x: 0, opacity: 1 }}
+                                                                                transition={{ duration: 0.2, delay: idx * 0.05 }}
+                                                                                className="flex items-center justify-between p-3 rounded-md"
+                                                                                style={{
+                                                                                    backgroundColor: "#161b22",
+                                                                                    border: "1px solid #30363d",
+                                                                                }}
+                                                                            >
+                                                                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                                                    <svg
+                                                                                        className="w-4 h-4 flex-shrink-0"
+                                                                                        fill="none"
+                                                                                        stroke="#7d8590"
+                                                                                        viewBox="0 0 24 24"
+                                                                                    >
+                                                                                        <path
+                                                                                            strokeLinecap="round"
+                                                                                            strokeLinejoin="round"
+                                                                                            strokeWidth={2}
+                                                                                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                                                                        />
+                                                                                    </svg>
+                                                                                    <span
+                                                                                        className="truncate"
+                                                                                        style={{
+                                                                                            color: "#58a6ff",
+                                                                                            fontFamily: "var(--font-family-mono)",
+                                                                                            fontSize: "0.875rem",
+                                                                                        }}
+                                                                                    >
+                                                                                        {file.path}
+                                                                                    </span>
+                                                                                </div>
+                                                                                <div className="flex items-center gap-3 ml-4 flex-shrink-0">
+                                                                                    <span
+                                                                                        style={{
+                                                                                            color: "#3fb950",
+                                                                                            fontSize: "0.875rem",
+                                                                                            fontFamily: "var(--font-family-mono)",
+                                                                                        }}
+                                                                                    >
+                                                                                        +{file.added}
+                                                                                    </span>
+                                                                                    <span
+                                                                                        style={{
+                                                                                            color: "#f85149",
+                                                                                            fontSize: "0.875rem",
+                                                                                            fontFamily: "var(--font-family-mono)",
+                                                                                        }}
+                                                                                    >
+                                                                                        -{file.removed}
+                                                                                    </span>
+                                                                                </div>
+                                                                            </motion.div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
                     </div>
