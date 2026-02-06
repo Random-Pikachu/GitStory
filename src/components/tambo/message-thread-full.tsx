@@ -6,8 +6,6 @@ import {
   MessageInputError,
   MessageInputFileButton,
   MessageInputImportCodeButton,
-  MessageInputMcpPromptButton,
-  MessageInputMcpResourceButton,
   MessageInputSubmitButton,
   MessageInputTextarea,
   MessageInputToolbar,
@@ -19,7 +17,6 @@ import {
 } from "@/components/tambo/message-suggestions";
 import { ScrollableMessageContainer } from "@/components/tambo/scrollable-message-container";
 import { RepoContextBadge } from "@/components/tambo/repo-context-badge";
-import { MessageInputMcpConfigButton } from "@/components/tambo/message-input";
 import { ThreadContainer, useThreadContainerContext } from "./thread-container";
 import {
   ThreadContent,
@@ -34,8 +31,9 @@ import {
 } from "@/components/tambo/thread-history";
 import { useMergeRefs } from "@/lib/thread-hooks";
 import type { Suggestion } from "@tambo-ai/react";
-import { useTamboThread, useTamboThreadInput } from "@tambo-ai/react";
+import { useTamboThread, useTamboThreadInput, useTamboThreadList } from "@tambo-ai/react";
 import type { VariantProps } from "class-variance-authority";
+import { useSearchParams, useRouter } from "next/navigation";
 import * as React from "react";
 
 /**
@@ -61,8 +59,59 @@ export const MessageThreadFull = React.forwardRef<
   className, variant, ...props }, ref) => {
   const { containerRef, historyPosition } = useThreadContainerContext();
   const mergedRef = useMergeRefs<HTMLDivElement | null>(ref, containerRef);
-  const { startNewThread } = useTamboThread();
+  const { startNewThread, thread, switchCurrentThread } = useTamboThread();
   const { setValue, submit, value } = useTamboThreadInput();
+  const { data: threads } = useTamboThreadList();
+
+  // URL routing
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const threadIdFromUrl = searchParams.get("thread");
+  const hasInitializedFromUrl = React.useRef(false);
+  const previousThreadId = React.useRef<string | null>(null);
+
+  // Clear repo context when switching threads (so import code badge doesn't persist)
+  React.useEffect(() => {
+    if (!thread?.id) return;
+
+    // If this is a thread switch (not initial load)
+    if (previousThreadId.current && previousThreadId.current !== thread.id) {
+      // Clear the repo context
+      localStorage.removeItem("gitstory-repo");
+      window.dispatchEvent(
+        new CustomEvent("gitstory-repo-changed", {
+          detail: null,
+        })
+      );
+    }
+
+    previousThreadId.current = thread.id;
+  }, [thread?.id]);
+
+  // On mount: load thread from URL if specified
+  React.useEffect(() => {
+    if (hasInitializedFromUrl.current) return;
+    if (!threadIdFromUrl || !threads?.items?.length) return;
+
+    // Check if the thread exists
+    const threadExists = threads.items.some(t => t.id === threadIdFromUrl);
+    if (threadExists && thread?.id !== threadIdFromUrl) {
+      switchCurrentThread(threadIdFromUrl);
+    }
+    hasInitializedFromUrl.current = true;
+  }, [threadIdFromUrl, threads?.items, thread?.id, switchCurrentThread]);
+
+  // Update URL when thread changes
+  React.useEffect(() => {
+    if (!thread?.id) return;
+
+    const currentThreadParam = searchParams.get("thread");
+    if (currentThreadParam !== thread.id) {
+      // Update URL without full navigation
+      const newUrl = `/chat?thread=${thread.id}`;
+      router.replace(newUrl, { scroll: false });
+    }
+  }, [thread?.id, searchParams, router]);
 
   // Get repo context from localStorage
   const getRepoContext = React.useCallback((): string | null => {
@@ -199,10 +248,7 @@ export const MessageThreadFull = React.forwardRef<
             <MessageInputTextarea placeholder="Type your message or paste images..." />
             <MessageInputToolbar>
               <MessageInputFileButton />
-              <MessageInputMcpPromptButton />
-              <MessageInputMcpResourceButton />
               <MessageInputImportCodeButton />
-              <MessageInputMcpConfigButton />
               <MessageInputSubmitButton />
             </MessageInputToolbar>
             <MessageInputError />
