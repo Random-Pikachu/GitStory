@@ -75,13 +75,20 @@ function computeDiff(beforeCode: string, afterCode: string): DiffLine[] {
 }
 
 export function DiffViewer({
-    fileName = "",
-    beforeCode = "",
-    afterCode = "",
-    language = "javascript",
-    annotations = [],
+    fileName: rawFileName,
+    beforeCode: rawBeforeCode,
+    afterCode: rawAfterCode,
+    language: rawLanguage,
+    annotations: rawAnnotations,
     commitHash,
 }: DiffViewerProps) {
+    // Null-safe prop defaults (handles both undefined AND null)
+    const fileName = rawFileName ?? "";
+    const beforeCode = rawBeforeCode ?? "";
+    const afterCode = rawAfterCode ?? "";
+    const language = rawLanguage ?? "javascript";
+    const safeAnnotations = rawAnnotations ?? [];
+
     const [viewMode, setViewMode] = useState<"split" | "unified">("split");
     const [showAnnotations, setShowAnnotations] = useState(true);
 
@@ -98,7 +105,7 @@ export function DiffViewer({
     const beforeLinesSet = useMemo(() => new Set(beforeLines), [beforeLines]);
     const afterLinesSet = useMemo(() => new Set(afterLines), [afterLines]);
 
-    // Handle undefined data during streaming
+    // Handle undefined data during streaming (loading state)
     if (!fileName && !beforeCode && !afterCode) {
         return (
             <div className="rounded-xl p-8" style={{ backgroundColor: "#161b22", border: "1px solid #30363d" }}>
@@ -111,8 +118,40 @@ export function DiffViewer({
         );
     }
 
+    // Handle case where file name is provided but content couldn't be fetched
+    if (fileName && !beforeCode && !afterCode) {
+        return (
+            <div className="rounded-xl p-6" style={{ backgroundColor: "#161b22", border: "1px solid #30363d" }}>
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: "#e09e13" }} />
+                    <h2 style={{ color: "#e6edf3", fontSize: "1.25rem", fontWeight: "600" }}>
+                        {fileName}
+                    </h2>
+                    {commitHash && (
+                        <span className="text-xs px-2 py-1 rounded" style={{ backgroundColor: "#21262d", color: "#7d8590" }}>
+                            {commitHash}
+                        </span>
+                    )}
+                </div>
+                <div className="p-4 rounded-lg" style={{ backgroundColor: "#2d1f00", border: "1px solid #e09e13" }}>
+                    <p style={{ color: "#f0c541" }}>
+                        ⚠️ File content could not be retrieved. This may happen if:
+                    </p>
+                    <ul className="mt-2 ml-4 list-disc" style={{ color: "#c9d1d9" }}>
+                        <li>The file was renamed or moved in this commit</li>
+                        <li>The file is binary or too large</li>
+                        <li>API rate limits were reached</li>
+                    </ul>
+                    <p className="mt-3" style={{ color: "#7d8590" }}>
+                        Try viewing this file directly on GitHub.
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
     const getAnnotationForLine = (lineNumber: number) => {
-        return annotations.find((a) => a.line === lineNumber);
+        return safeAnnotations.find((a) => a.line === lineNumber);
     };
 
     const getAnnotationStyle = (type: Annotation["type"]) => {
@@ -143,7 +182,7 @@ export function DiffViewer({
         }
     };
 
-    const safeAnnotations = annotations ?? [];
+    // safeAnnotations is already defined at the top with null coalescing
 
     // Calculate dynamic height based on max lines (24px per line, capped at 720px for ~30 lines)
     const lineHeight = 24;

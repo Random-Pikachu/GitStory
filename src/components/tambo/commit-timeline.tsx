@@ -381,12 +381,18 @@ export function CommitTimeline({ data, repoUrl }: CommitTimelineProps) {
                                                             style={{ overflow: "hidden" }}
                                                         >
                                                             <div className="mt-4 pt-4" style={{ borderTop: "1px solid #30363d" }}>
-                                                                <div className="text-sm mb-3" style={{ color: "#7d8590" }}>
-                                                                    {commit.files?.length ?? 0} {(commit.files?.length ?? 0) === 1 ? 'file' : 'files'} changed
-                                                                    {(commit.files?.length ?? 0) > MAX_FILES_TO_SHOW && (
-                                                                        <span style={{ color: "#f0c541" }}> (showing first {MAX_FILES_TO_SHOW})</span>
-                                                                    )}
-                                                                </div>
+                                                                {(commit.added > 0 || commit.removed > 0) && (!commit.files || commit.files.length === 0) ? (
+                                                                    <div className="text-sm mb-3 italic" style={{ color: "#e09e13" }}>
+                                                                        File details not available for this commit (+{commit.added} / -{commit.removed} lines changed)
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="text-sm mb-3" style={{ color: "#7d8590" }}>
+                                                                        {commit.files?.length ?? 0} {(commit.files?.length ?? 0) === 1 ? 'file' : 'files'} changed
+                                                                        {(commit.files?.length ?? 0) > MAX_FILES_TO_SHOW && (
+                                                                            <span style={{ color: "#f0c541" }}> (showing first {MAX_FILES_TO_SHOW})</span>
+                                                                        )}
+                                                                    </div>
+                                                                )}
                                                                 <div className="space-y-2">
                                                                     {(commit.files ?? []).slice(0, MAX_FILES_TO_SHOW).map((file, idx) => {
                                                                         if (!file) return null;
